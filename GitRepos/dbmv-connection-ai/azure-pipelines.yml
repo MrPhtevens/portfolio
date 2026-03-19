@@ -1,0 +1,181 @@
+trigger:
+  branches:
+    include:
+      - main  # Trigger on changes to main branch
+
+variables:
+  environment: 'dev'  # Default environment for the pipeline
+
+stages:
+  # DEV stage - no manual approval
+  - stage: DeployDev
+    displayName: 'Deploy to DEV'
+    jobs:
+      - job: TerraformInit
+        displayName: 'Terraform Init for DEV'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: TerraformInstaller@1
+            displayName: 'Install Terraform'
+            inputs:
+              terraformVersion: latest
+
+          - task: TerraformCLI@1
+            displayName: 'Check Terraform version'
+            inputs:
+              command: version
+
+          - checkout: self
+
+          - task: TerraformTaskV3@3
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: $(Build.SourcesDirectory)/dev
+
+          - task: TerraformCLI@1
+            displayName: 'Create or Select Workspace'
+            inputs:
+              command: 'workspace'
+              workingDirectory: $(Build.SourcesDirectory)/dev
+              workspaceSubCommand: 'new'
+              workspaceName: 'dev'
+              allowExisting: true
+
+          - task: TerraformCLI@1
+            displayName: 'Validate Terraform'
+            inputs:
+              command: validate
+
+          - task: TerraformTaskV3@3
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              workingDirectory: $(Build.SourcesDirectory)/dev
+              environmentServiceName: '<your-azure-service-connection>'
+              isAutoApprove: true  # Automatically approve apply for DEV environment
+
+  # UAT stage - requires manual approval
+  - stage: DeployUAT
+    displayName: 'Deploy to UAT'
+    dependsOn: DeployDev
+    condition: succeeded('DeployDev')
+    jobs:
+      - job: TerraformInit
+        displayName: 'Terraform Init for UAT'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: TerraformInstaller@1
+            inputs:
+              terraformVersion: latest
+
+          - task: TerraformCLI@1
+            displayName: 'Check Terraform version'
+            inputs:
+              command: version
+
+          - checkout: self
+
+          - task: TerraformTaskV3@3
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: $(Build.SourcesDirectory)/uat
+
+          - task: TerraformCLI@1
+            displayName: 'Create or Select Workspace'
+            inputs:
+              command: 'workspace'
+              workingDirectory: $(Build.SourcesDirectory)/uat
+              workspaceSubCommand: 'new'
+              workspaceName: 'uat'
+              allowExisting: true
+
+          - task: TerraformTaskV3@3
+            inputs:
+              provider: 'azurerm'
+              command: 'plan'
+              workingDirectory: $(Build.SourcesDirectory)/uat
+              environmentServiceName: '<your-azure-service-connection>'
+
+          - task: TerraformTaskV3@3
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              workingDirectory: $(Build.SourcesDirectory)/uat
+              environmentServiceName: '<your-azure-service-connection>'
+              isAutoApprove: false  # Manual approval for UAT environment
+
+          # Manual approval step for UAT deployment
+          - task: ManualValidation@1
+            displayName: 'Approve UAT Deployment'
+            inputs:
+              notifyUsers: |
+                '<approver-email-1>',
+                '<approver-email-2>',
+                '<approver-email-3>'
+              instructions: 'Please approve the UAT deployment before proceeding.'
+
+  # PROD stage - requires manual approval
+  - stage: DeployProd
+    displayName: 'Deploy to PROD'
+    dependsOn: DeployUAT
+    condition: succeeded('DeployUAT')
+    jobs:
+      - job: TerraformInit
+        displayName: 'Terraform Init for PROD'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: TerraformInstaller@1
+            inputs:
+              terraformVersion: latest
+
+          - task: TerraformCLI@1
+            displayName: 'Check Terraform version'
+            inputs:
+              command: version
+
+          - checkout: self
+
+          - task: TerraformTaskV3@3
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: $(Build.SourcesDirectory)/prod
+
+          - task: TerraformCLI@1
+            displayName: 'Create or Select Workspace'
+            inputs:
+              command: 'workspace'
+              workingDirectory: $(Build.SourcesDirectory)/prod
+              workspaceSubCommand: 'new'
+              workspaceName: 'prod'
+              allowExisting: true
+
+          - task: TerraformTaskV3@3
+            inputs:
+              provider: 'azurerm'
+              command: 'plan'
+              workingDirectory: $(Build.SourcesDirectory)/prod
+              environmentServiceName: '<your-azure-service-connection>'
+
+          - task: TerraformTaskV3@3
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              workingDirectory: $(Build.SourcesDirectory)/prod
+              environmentServiceName: '<your-azure-service-connection>'
+              isAutoApprove: false  # Manual approval for PROD environment
+
+          # Manual approval step for PROD deployment
+          - task: ManualValidation@1
+            displayName: 'Approve PROD Deployment'
+            inputs:
+              notifyUsers: |
+                '<approver-email-1>',
+                '<approver-email-2>',
+                '<approver-email-3>'
+              instructions: 'Please approve the PROD deployment before proceeding.'
