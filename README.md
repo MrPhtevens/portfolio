@@ -1,6 +1,6 @@
 # Portfolio
 
-A collection of Terraform infrastructure-as-code and Python automation projects showcasing cloud engineering skills across AWS and Azure.
+A collection of Terraform infrastructure-as-code and Python automation projects showcasing cloud engineering skills across AWS and Azure. References to actual working infrastructure have been redacted/replaced for privacy and secuirity reasons
 
 ## Terraform
 
